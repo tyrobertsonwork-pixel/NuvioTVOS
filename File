@@ -1,0 +1,79 @@
+name: NuvioTVOS Cinema Gold Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Tuist
+        run: brew install tuist
+
+      - name: Apply Cinema Gold defaults
+        run: |
+          python3 <<'PYTHON'
+          from pathlib import Path
+
+          root = Path("tvosApp/NuvioTV")
+          if not root.exists():
+              raise SystemExit(
+                  "Source directory not found; check repository layout."
+              )
+
+          changed = []
+
+          for path in root.rglob("*.swift"):
+              if path.name == "NuvioSyncService.swift":
+                  continue
+
+              original = path.read_text(encoding="utf-8")
+              updated = original.replace(
+                  "SettingsAccent.white.rawValue",
+                  "SettingsAccent.amber.rawValue"
+              ).replace(
+                  "SettingsBackground.charcoal.rawValue",
+                  "SettingsBackground.midnight.rawValue"
+              )
+
+              if path.name == "SettingsView.swift":
+                  updated = updated.replace(
+                      "SettingsAccent.white.color",
+                      "SettingsAccent.amber.color"
+                  ).replace(
+                      "SettingsBackground.charcoal.color",
+                      "SettingsBackground.midnight.color"
+                  )
+
+              if updated != original:
+                  path.write_text(updated, encoding="utf-8")
+                  changed.append(str(path))
+
+          print("Updated files:", changed)
+
+          if not changed:
+              raise SystemExit(
+                  "No theme defaults matched; build stopped."
+              )
+          PYTHON
+
+      - name: Build unsigned IPA
+        run: bash scripts/build-ipa.sh
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: NuvioTV-Cinema-Gold-unsigned-IPA
+          path: build-ipa/NuvioTV-*-unsigned-release.ipa
+          if-no-files-found: error
+          retention-days: 7
